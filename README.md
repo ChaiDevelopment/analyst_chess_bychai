@@ -134,8 +134,11 @@ The Vercel browser app calls the Railway API directly. A Railway private domain
 be used as `VITE_API_URL`.
 
 1. In Railway, open the **backend** service and create/copy its public domain,
-   e.g. `https://your-backend-production.up.railway.app`. Confirm that opening
-   `https://your-backend-production.up.railway.app/api/health` returns JSON.
+   e.g. `https://caturchaibackend.com`. Confirm that opening
+   `https://caturchaibackend.com/api/health` returns JSON. Railway's target
+   port may be `8080`, but a custom public domain normally uses HTTPS port 443;
+   do not append `:8080` to the browser URL unless you deliberately exposed
+   that non-standard public port.
 2. In Railway **Variables**, set `CORS_ORIGINS` to the exact Vercel production
    origin, without `/api` or a trailing slash, e.g.
    `https://your-project.vercel.app`. Redeploy the backend after saving it.
@@ -144,7 +147,7 @@ be used as `VITE_API_URL`.
    required):
 
    ```text
-   VITE_API_URL=https://your-backend-production.up.railway.app/api
+   VITE_API_URL=https://caturchaibackend.com/api
    ```
 
 4. Redeploy the Vercel project. Vite inserts `VITE_*` values at build time, so
