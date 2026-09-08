@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-ink-950 text-ink-50 antialiased;
+  background-image:
+    radial-gradient(ellipse at top, rgba(201, 162, 39, 0.06), transparent 55%);
+  background-attachment: fixed;
+}
+
+::selection {
+  background: rgba(201, 162, 39, 0.35);
+}
+
+* {
+  scrollbar-color: #333a42 #14171b;
+  scrollbar-width: thin;
+}
+
+:focus-visible {
+  outline: 2px solid #C9A227;
+  outline-offset: 2px;
+}
