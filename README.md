@@ -127,6 +127,33 @@ explanations enabled.
 The frontend waits for the backend health check before it starts. The Nginx
 proxy allows up to six minutes for a deeper Stockfish review to finish.
 
+## Railway backend + Vercel frontend deployment
+
+The Vercel browser app calls the Railway API directly. A Railway private domain
+(`*.railway.internal`) works only between Railway services, so it must **not**
+be used as `VITE_API_URL`.
+
+1. In Railway, open the **backend** service and create/copy its public domain,
+   e.g. `https://your-backend-production.up.railway.app`. Confirm that opening
+   `https://your-backend-production.up.railway.app/api/health` returns JSON.
+2. In Railway **Variables**, set `CORS_ORIGINS` to the exact Vercel production
+   origin, without `/api` or a trailing slash, e.g.
+   `https://your-project.vercel.app`. Redeploy the backend after saving it.
+3. In Vercel, open the **frontend** project > **Settings** > **Environment
+   Variables**. Add this for the Production environment (and Preview too if
+   required):
+
+   ```text
+   VITE_API_URL=https://your-backend-production.up.railway.app/api
+   ```
+
+4. Redeploy the Vercel project. Vite inserts `VITE_*` values at build time, so
+   changing the variable without a new deployment does not update the live app.
+
+The code markers in `frontend/src/services/api.ts`, `frontend/.env.example`,
+and `backend/.env.example` identify these two settings. Do not put API keys in
+`VITE_*` variables: they are exposed to every browser.
+
 ## 8. API usage
 
 ### `POST /api/analyze`

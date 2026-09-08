@@ -1,5 +1,7 @@
 import type { AnalyzeResponse } from '../types/chess'
 
+// On Vercel, VITE_API_URL is baked in during the build. Set it to the PUBLIC
+// Railway URL plus /api; a *.railway.internal host only works inside Railway.
 const BASE_URL = (import.meta.env.VITE_API_URL ?? '/api').replace(/\/$/, '')
 const REQUEST_TIMEOUT_MS = 5 * 60 * 1000
 
@@ -41,7 +43,7 @@ export async function analyzeGame(pgn: string, depth?: number): Promise<AnalyzeR
       // ignore parse failure, keep default message
     }
     if (res.status >= 500 && message === `Request failed with status ${res.status}`) {
-      message = 'Backend tidak dapat dihubungi. Jalankan server backend di http://localhost:8000 lalu coba lagi.'
+      message = 'Backend tidak dapat dihubungi. Periksa VITE_API_URL (Vercel) dan CORS_ORIGINS (Railway), lalu coba lagi.'
     }
     throw new ApiRequestError(message, res.status)
   }

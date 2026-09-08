@@ -12,6 +12,8 @@ app = FastAPI(
     version="1.0.0",
 )
 
+# When Vercel calls this public Railway API directly, its browser origin must
+# be listed in Railway's CORS_ORIGINS variable (see backend/.env.example).
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS or ["*"],

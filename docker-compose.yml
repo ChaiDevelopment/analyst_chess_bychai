@@ -1,0 +1,29 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANALYSIS_DEPTH=${ANALYSIS_DEPTH:-16}
+      - MAX_PLIES=${MAX_PLIES:-300}
+      - CORS_ORIGINS=http://localhost:5173,http://localhost:3000
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      - PORT=80
+      - BACKEND_UPSTREAM=backend:8000
+    restart: unless-stopped
