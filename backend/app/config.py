@@ -73,9 +73,12 @@ class Settings:
     MAX_PLIES: int = _positive_int("MAX_PLIES", 300, minimum=1, maximum=2_000)
     MAX_PGN_CHARS: int = _positive_int("MAX_PGN_CHARS", 50_000, minimum=1_000, maximum=1_000_000)
     CORS_ORIGINS: list[str] = [
-        origin.strip()
+        # Browsers send Origin without a trailing slash. Normalizing here
+        # prevents a common Railway-variable typo from silently blocking CORS.
+        origin.strip().rstrip("/")
         for origin in os.getenv(
-            "CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"
+            "CORS_ORIGINS",
+            "http://localhost:5173,http://127.0.0.1:5173,https://analyst-chess-bychai.vercel.app",
         ).split(",")
         if origin.strip()
     ]
