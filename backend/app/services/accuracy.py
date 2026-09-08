@@ -19,7 +19,8 @@ def accuracy_from_average_cpl(average_cpl: float) -> float:
     if average_cpl <= 0:
         return 100.0
 
-    # Decay constant chosen so ~25 cpl average -> ~85, ~100 cpl -> ~55,
-    # ~300+ cpl -> near 0. Purely heuristic, isolated here for easy tuning.
-    score = 103.1668 * math.exp(-0.04354 * average_cpl) - 3.1668
+    # A gentle decay keeps a normal human game meaningful: ~25 CPL -> 86,
+    # ~100 CPL -> 55, ~300 CPL -> 17. The prior coefficient made even
+    # ordinary games collapse to 0.0 accuracy.
+    score = 100.0 * math.exp(-0.006 * average_cpl)
     return max(0.0, min(100.0, round(score, 1)))

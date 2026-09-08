@@ -1,13 +1,15 @@
-import type { GameSummary, MoveStats } from '../types/chess'
+import type { Classification, Color, GameSummary, MoveStats } from '../types/chess'
 import { CLASSIFICATION_META } from '../utils/classification'
 
 interface Props {
   summary: GameSummary
   onJumpToPly: (ply: number) => void
+  onSelectClassification: (classification: Classification, color: Color) => void
 }
 
 const STAT_ORDER: (keyof MoveStats)[] = [
   'brilliant',
+  'great',
   'best',
   'excellent',
   'good',
@@ -15,10 +17,12 @@ const STAT_ORDER: (keyof MoveStats)[] = [
   'inaccuracy',
   'mistake',
   'blunder',
+  'miss',
 ]
 
 const STAT_TO_CLASSIFICATION: Record<keyof MoveStats, keyof typeof CLASSIFICATION_META> = {
   brilliant: 'BRILLIANT',
+  great: 'GREAT',
   best: 'BEST',
   excellent: 'EXCELLENT',
   good: 'GOOD',
@@ -26,20 +30,34 @@ const STAT_TO_CLASSIFICATION: Record<keyof MoveStats, keyof typeof CLASSIFICATIO
   inaccuracy: 'INACCURACY',
   mistake: 'MISTAKE',
   blunder: 'BLUNDER',
+  miss: 'MISS',
 }
 
-function StatRow({ stats }: { stats: MoveStats }) {
+function StatRow({
+  stats,
+  color,
+  onSelectClassification,
+}: {
+  stats: MoveStats
+  color: Color
+  onSelectClassification: (classification: Classification, color: Color) => void
+}) {
   return (
     <div className="flex flex-col gap-1">
       {STAT_ORDER.map((key) => {
         const count = stats[key]
         const meta = CLASSIFICATION_META[STAT_TO_CLASSIFICATION[key]]
-        if (count === 0) return null
         return (
-          <div key={key} className="flex items-center justify-between text-sm font-sans">
+          <button
+            key={key}
+            type="button"
+            onClick={() => onSelectClassification(STAT_TO_CLASSIFICATION[key], color)}
+            className="flex items-center justify-between text-sm font-sans rounded px-1.5 py-1 -mx-1.5 hover:bg-ink-800 transition-colors text-left"
+            title={`Show ${count} ${meta.label.toLowerCase()} move${count === 1 ? '' : 's'}`}
+          >
             <span className={meta.color}>{meta.label}</span>
             <span className="text-ink-100 tabular-nums">{count}</span>
-          </div>
+          </button>
         )
       })}
     </div>
@@ -55,7 +73,7 @@ function AccuracyDial({ label, accuracy }: { label: string; accuracy: number }) 
   )
 }
 
-export default function GameSummaryView({ summary, onJumpToPly }: Props) {
+export default function GameSummaryView({ summary, onJumpToPly, onSelectClassification }: Props) {
   return (
     <div className="flex flex-col gap-6 font-sans">
       <div className="flex items-center justify-around bg-ink-800/60 rounded-lg py-6">
@@ -67,11 +85,11 @@ export default function GameSummaryView({ summary, onJumpToPly }: Props) {
       <div className="grid grid-cols-2 gap-4">
         <div>
           <div className="text-xs text-ink-500 mb-2">White moves</div>
-          <StatRow stats={summary.white.stats} />
+          <StatRow stats={summary.white.stats} color="white" onSelectClassification={onSelectClassification} />
         </div>
         <div>
           <div className="text-xs text-ink-500 mb-2">Black moves</div>
-          <StatRow stats={summary.black.stats} />
+          <StatRow stats={summary.black.stats} color="black" onSelectClassification={onSelectClassification} />
         </div>
       </div>
 

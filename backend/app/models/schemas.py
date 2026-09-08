@@ -10,12 +10,14 @@ from pydantic import BaseModel, Field
 class Classification(str, Enum):
     BOOK = "BOOK"
     BRILLIANT = "BRILLIANT"
+    GREAT = "GREAT"
     BEST = "BEST"
     EXCELLENT = "EXCELLENT"
     GOOD = "GOOD"
     INACCURACY = "INACCURACY"
     MISTAKE = "MISTAKE"
     BLUNDER = "BLUNDER"
+    MISS = "MISS"
 
 
 class AnalyzeRequest(BaseModel):
@@ -61,6 +63,7 @@ class MoveAnalysis(BaseModel):
 
 class MoveStats(BaseModel):
     brilliant: int = 0
+    great: int = 0
     best: int = 0
     excellent: int = 0
     good: int = 0
@@ -68,6 +71,7 @@ class MoveStats(BaseModel):
     inaccuracy: int = 0
     mistake: int = 0
     blunder: int = 0
+    miss: int = 0
 
 
 class PlayerSummary(BaseModel):

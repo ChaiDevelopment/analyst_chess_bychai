@@ -1,12 +1,14 @@
 export type Classification =
   | 'BOOK'
   | 'BRILLIANT'
+  | 'GREAT'
   | 'BEST'
   | 'EXCELLENT'
   | 'GOOD'
   | 'INACCURACY'
   | 'MISTAKE'
   | 'BLUNDER'
+  | 'MISS'
 
 export type Color = 'white' | 'black'
 
@@ -46,6 +48,7 @@ export interface MoveAnalysis {
 
 export interface MoveStats {
   brilliant: number
+  great: number
   best: number
   excellent: number
   good: number
@@ -53,6 +56,7 @@ export interface MoveStats {
   inaccuracy: number
   mistake: number
   blunder: number
+  miss: number
 }
 
 export interface PlayerSummary {

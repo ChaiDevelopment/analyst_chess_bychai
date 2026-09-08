@@ -35,7 +35,7 @@ describe('evalToBarPercent', () => {
 describe('CLASSIFICATION_META', () => {
   it('has an entry for every classification the backend can send', () => {
     const expected = [
-      'BOOK', 'BRILLIANT', 'BEST', 'EXCELLENT', 'GOOD', 'INACCURACY', 'MISTAKE', 'BLUNDER',
+      'BOOK', 'BRILLIANT', 'GREAT', 'BEST', 'EXCELLENT', 'GOOD', 'INACCURACY', 'MISTAKE', 'BLUNDER', 'MISS',
     ]
     for (const key of expected) {
       expect(CLASSIFICATION_META).toHaveProperty(key)

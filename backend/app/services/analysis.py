@@ -54,6 +54,7 @@ def _build_stats(moves: list[MoveAnalysis], color: str) -> tuple[MoveStats, floa
     losses: list[int] = []
     field_map = {
         Classification.BRILLIANT: "brilliant",
+        Classification.GREAT: "great",
         Classification.BEST: "best",
         Classification.EXCELLENT: "excellent",
         Classification.GOOD: "good",
@@ -61,6 +62,7 @@ def _build_stats(moves: list[MoveAnalysis], color: str) -> tuple[MoveStats, floa
         Classification.INACCURACY: "inaccuracy",
         Classification.MISTAKE: "mistake",
         Classification.BLUNDER: "blunder",
+        Classification.MISS: "miss",
     }
     for m in moves:
         if m.color != color:
@@ -129,6 +131,7 @@ def analyze_pgn(
 
             classification = classify_move(
                 cpl=cpl,
+                eval_before_for_mover=eval_before_mover,
                 eval_after_for_mover=eval_after_mover,
                 is_book=book,
                 is_best_move=is_best,
@@ -150,6 +153,8 @@ def analyze_pgn(
                 Classification.MISTAKE,
                 Classification.BLUNDER,
                 Classification.BRILLIANT,
+                Classification.GREAT,
+                Classification.MISS,
                 Classification.INACCURACY,
             ):
                 variation = eval_before.principal_variation_san[:8]
@@ -220,7 +225,7 @@ def build_summary(moves: list[MoveAnalysis], game_info: GameInfo) -> GameSummary
     most_critical = None
 
     mistakes_and_blunders = [m for m in moves if m.classification in (
-        Classification.MISTAKE, Classification.BLUNDER
+        Classification.MISTAKE, Classification.BLUNDER, Classification.MISS
     )]
     if mistakes_and_blunders:
         worst = max(mistakes_and_blunders, key=lambda m: m.centipawn_loss)
@@ -231,8 +236,9 @@ def build_summary(moves: list[MoveAnalysis], game_info: GameInfo) -> GameSummary
         )
 
     brilliants = [m for m in moves if m.classification == Classification.BRILLIANT]
+    greats = [m for m in moves if m.classification == Classification.GREAT]
     bests = [m for m in moves if m.classification == Classification.BEST]
-    standout_pool = brilliants or bests
+    standout_pool = brilliants or greats or bests
     if standout_pool:
         best_pick = max(standout_pool, key=lambda m: swing_for(m) * -1)
         best_move_played = CriticalMoment(

@@ -47,7 +47,11 @@ def test_checkmating_move_is_not_penalized(blunder_pgn):
     _, moves, _ = analyze_pgn(blunder_pgn, depth=8)
     mating_move = moves[-1]
     assert mating_move.san == "Qxf7#"
-    assert mating_move.classification in (Classification.BEST, Classification.BOOK)
+    assert mating_move.classification in (
+        Classification.BEST,
+        Classification.GREAT,
+        Classification.BOOK,
+    )
     assert mating_move.centipawn_loss == 0
 
 

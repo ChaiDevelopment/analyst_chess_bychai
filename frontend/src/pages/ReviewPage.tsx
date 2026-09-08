@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { AnalyzeResponse } from '../types/chess'
+import type { AnalyzeResponse, Classification, Color } from '../types/chess'
 import ChessBoardView from '../components/ChessBoardView'
 import EvaluationBar from '../components/EvaluationBar'
 import BoardControls from '../components/BoardControls'
@@ -14,6 +14,7 @@ interface Props {
 }
 
 type Tab = 'moves' | 'summary'
+type MoveFilter = { classification: Classification; color: Color }
 
 export default function ReviewPage({ data }: Props) {
   const { moves, summary, game } = data
@@ -21,6 +22,11 @@ export default function ReviewPage({ data }: Props) {
   const [showBestMove, setShowBestMove] = useState(true)
   const [isPlaying, setIsPlaying] = useState(false)
   const [tab, setTab] = useState<Tab>('moves')
+  const [moveFilter, setMoveFilter] = useState<MoveFilter | null>(null)
+
+  const visibleMoves = moveFilter
+    ? moves.filter((move) => move.classification === moveFilter.classification && move.color === moveFilter.color)
+    : moves
 
   const currentMove = ply > 0 ? moves[ply - 1] : null
   const currentFen = currentMove ? currentMove.fen_after : STARTING_FEN
@@ -36,6 +42,13 @@ export default function ReviewPage({ data }: Props) {
     setTab('moves')
     setPly(targetPly)
   }, [])
+
+  const selectClassification = useCallback((classification: Classification, color: Color) => {
+    const firstMatch = moves.find((move) => move.classification === classification && move.color === color)
+    setMoveFilter({ classification, color })
+    setTab('moves')
+    if (firstMatch) setPly(firstMatch.ply)
+  }, [moves])
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -109,10 +122,19 @@ export default function ReviewPage({ data }: Props) {
 
         {/* CENTER: move list */}
         <div className="bg-ink-900/60 border border-ink-800 rounded-lg h-[420px] lg:h-[560px] flex flex-col">
-          <div className="px-3 py-2 border-b border-ink-800 text-xs font-sans text-ink-500 uppercase tracking-wide">
-            Moves
+          <div className="px-3 py-2 border-b border-ink-800 text-xs font-sans text-ink-500 uppercase tracking-wide flex items-center justify-between">
+            <span>{moveFilter ? `${moveFilter.color} · ${moveFilter.classification} (${visibleMoves.length})` : 'Moves'}</span>
+            {moveFilter && (
+              <button
+                type="button"
+                onClick={() => setMoveFilter(null)}
+                className="text-brass-400 hover:text-brass-300 normal-case"
+              >
+                Show all
+              </button>
+            )}
           </div>
-          <MoveList moves={moves} currentPly={ply} onSelect={selectByPly} />
+          <MoveList moves={visibleMoves} currentPly={ply} onSelect={selectByPly} />
         </div>
 
         {/* RIGHT: analysis / summary */}
@@ -144,7 +166,11 @@ export default function ReviewPage({ data }: Props) {
               />
             ) : (
               <div className="h-full overflow-y-auto p-4">
-                <GameSummaryView summary={summary} onJumpToPly={selectByPly} />
+                <GameSummaryView
+                  summary={summary}
+                  onJumpToPly={selectByPly}
+                  onSelectClassification={selectClassification}
+                />
               </div>
             )}
           </div>

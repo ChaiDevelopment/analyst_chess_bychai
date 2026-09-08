@@ -27,6 +27,8 @@ THRESHOLDS = {
 BRILLIANT_MAX_CPL = 10  # move must be (near-)best in engine terms
 BRILLIANT_MIN_EVAL_AFTER = -0.5  # don't call a move brilliant if it's losing badly
 BRILLIANT_SACRIFICE_MIN_LOSS = 200  # centipawns of *material* given up, roughly
+MISS_MIN_CPL = 75
+MISS_MIN_OPPORTUNITY = 1.5  # pawn advantage available before the missed move
 
 
 def classify_by_cpl(cpl: int) -> Classification:
@@ -137,6 +139,7 @@ def detect_tactical_tags(
 def classify_move(
     *,
     cpl: int,
+    eval_before_for_mover: float,
     eval_after_for_mover: float,
     is_book: bool,
     is_best_move: bool,
@@ -161,5 +164,23 @@ def classify_move(
         and base in (Classification.BEST, Classification.EXCELLENT)
     ):
         return Classification.BRILLIANT
+
+    # A Great move is the engine's top choice in a forcing, decisive moment.
+    # Detecting literal "only moves" needs a MultiPV search; this transparent
+    # MVP heuristic deliberately labels only forcing best moves as Great.
+    if is_best_move and cpl <= THRESHOLDS[Classification.BEST] and any(
+        tag in tactical_tags for tag in ("checkmate", "winning_material", "forced_move")
+    ):
+        return Classification.GREAT
+
+    # Miss = a player had a clearly favourable chance but chose a materially
+    # weaker continuation. It takes priority over generic error categories so
+    # the summary exposes missed opportunities separately.
+    if (
+        not is_best_move
+        and eval_before_for_mover >= MISS_MIN_OPPORTUNITY
+        and cpl >= MISS_MIN_CPL
+    ):
+        return Classification.MISS
 
     return base

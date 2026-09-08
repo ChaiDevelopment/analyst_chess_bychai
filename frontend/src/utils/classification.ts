@@ -9,6 +9,7 @@ interface ClassificationMeta {
 
 export const CLASSIFICATION_META: Record<Classification, ClassificationMeta> = {
   BRILLIANT: { label: 'Brilliant', color: 'text-brilliant', bg: 'bg-brilliant/15', symbol: '!!' },
+  GREAT: { label: 'Great', color: 'text-amber-400', bg: 'bg-amber-400/10', symbol: '!' },
   BEST: { label: 'Best', color: 'text-good', bg: 'bg-good/15', symbol: '★' },
   EXCELLENT: { label: 'Excellent', color: 'text-good', bg: 'bg-good/10', symbol: '!' },
   GOOD: { label: 'Good', color: 'text-brass-400', bg: 'bg-brass-500/10', symbol: '' },
@@ -16,6 +17,7 @@ export const CLASSIFICATION_META: Record<Classification, ClassificationMeta> = {
   INACCURACY: { label: 'Inaccuracy', color: 'text-amber-400', bg: 'bg-amber-400/10', symbol: '?!' },
   MISTAKE: { label: 'Mistake', color: 'text-orange-400', bg: 'bg-orange-400/10', symbol: '?' },
   BLUNDER: { label: 'Blunder', color: 'text-bad', bg: 'bg-bad/15', symbol: '??' },
+  MISS: { label: 'Miss', color: 'text-brass-400', bg: 'bg-brass-500/10', symbol: 'x' },
 }
 
 export function formatEval(pawns: number, mateIn?: number | null): string {

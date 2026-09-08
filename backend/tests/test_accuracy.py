@@ -12,6 +12,11 @@ def test_accuracy_decreases_with_higher_cpl():
     assert a1 > a2 > a3
 
 
+def test_normal_average_cpl_does_not_collapse_to_zero():
+    assert accuracy_from_average_cpl(25) == 86.1
+    assert accuracy_from_average_cpl(100) == 54.9
+
+
 def test_accuracy_is_clamped_between_0_and_100():
     assert 0.0 <= accuracy_from_average_cpl(0) <= 100.0
     assert 0.0 <= accuracy_from_average_cpl(100000) <= 100.0
