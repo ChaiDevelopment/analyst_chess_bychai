@@ -42,4 +42,17 @@ def test_missed_favourable_opportunity_is_miss():
         is_book=False,
         is_best_move=False,
         tactical_tags=[],
+        uniqueness_gap=0.9,
     ) == Classification.MISS
+
+
+def test_quiet_unique_tactical_move_can_be_brilliant():
+    assert classify_move(
+        cpl=0,
+        eval_before_for_mover=0.2,
+        eval_after_for_mover=1.2,
+        is_book=False,
+        is_best_move=True,
+        tactical_tags=["unique_best", "quiet_tactical", "tactical_sequence"],
+        uniqueness_gap=1.0,
+    ) == Classification.BRILLIANT

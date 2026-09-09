@@ -7,7 +7,12 @@ from __future__ import annotations
 
 import chess
 
-from app.chess.classification import classify_move, detect_tactical_tags
+from app.chess.classification import (
+    ONLY_MOVE_GAP,
+    UNIQUE_BEST_GAP,
+    classify_move,
+    detect_tactical_tags,
+)
 from app.chess.opening_book import is_book_move, lookup_opening
 from app.chess.pgn_parser import ParsedGame, parse_pgn
 from app.config import settings
@@ -47,6 +52,87 @@ def _white_perspective(score_pawns: float | None, mate_in: int | None) -> float:
     if mate_in is not None:
         return _mate_magnitude(mate_in)
     return score_pawns or 0.0
+
+
+def _needs_multipv(
+    *,
+    is_book: bool,
+    cpl: int,
+    eval_before_for_mover: float,
+    tactical_tags: list[str],
+    board_before: chess.Board,
+) -> bool:
+    """Reserve the extra MultiPV search for plausible tactical candidates."""
+    if is_book:
+        return False
+    if cpl >= 75 and eval_before_for_mover >= 1.5:
+        return True
+    if cpl > 30:
+        return False
+    return (
+        bool(tactical_tags)
+        or abs(eval_before_for_mover) >= 1.5
+        or board_before.legal_moves.count() <= 18
+    )
+
+
+def _append_multipv_tags(
+    *,
+    tags: list[str],
+    board_before: chess.Board,
+    move: chess.Move,
+    mover_color: str,
+    eval_before_for_mover: float,
+    eval_after_for_mover: float,
+    mate_after: int | None,
+    multipv_result: EngineResult,
+) -> tuple[list[str], bool, float]:
+    """Turn a bounded MultiPV result into transparent classifier signals."""
+    candidates = multipv_result.candidates
+    if not candidates:
+        return tags, False, 0.0
+
+    is_best = candidates[0].move_uci == move.uci()
+    if len(candidates) < 2:
+        return tags, is_best, 0.0
+
+    best_score = _eval_for_mover(
+        candidates[0].score_pawns, candidates[0].mate_in, mover_color
+    )
+    second_score = _eval_for_mover(
+        candidates[1].score_pawns, candidates[1].mate_in, mover_color
+    )
+    gap = max(0.0, best_score - second_score)
+    enriched = list(tags)
+
+    if is_best and gap >= UNIQUE_BEST_GAP:
+        enriched.append("unique_best")
+    if is_best and gap >= ONLY_MOVE_GAP:
+        enriched.append("only_move")
+
+    board_after = board_before.copy()
+    board_after.push(move)
+    quiet = not board_before.is_capture(move) and not board_after.is_check()
+    if is_best and quiet and gap >= UNIQUE_BEST_GAP:
+        enriched.append("quiet_tactical")
+
+    # The selected MultiPV line contains the played move, opponent best
+    # response, and continuation, avoiding another tactical deep search.
+    if is_best and gap >= UNIQUE_BEST_GAP and len(multipv_result.principal_variation_san) >= 3:
+        enriched.append("tactical_sequence")
+    if is_best and mate_after is not None and _eval_for_mover(None, mate_after, mover_color) > 0:
+        enriched.append("mating_threat")
+    if is_best and gap >= UNIQUE_BEST_GAP and eval_after_for_mover - eval_before_for_mover >= 1.0:
+        enriched.append("tactical_conversion")
+    if (
+        is_best
+        and gap >= ONLY_MOVE_GAP
+        and eval_before_for_mover <= -1.5
+        and eval_after_for_mover >= eval_before_for_mover - 0.15
+    ):
+        enriched.append("defensive_resource")
+
+    return list(dict.fromkeys(enriched)), is_best, round(gap, 2)
 
 
 def _build_stats(moves: list[MoveAnalysis], color: str) -> tuple[MoveStats, float, float]:
@@ -128,6 +214,30 @@ def analyze_pgn(
             tactical_tags = detect_tactical_tags(board_before, move_obj, board_after)
 
             is_best = move_obj.uci() == eval_before.best_move_uci
+            uniqueness_gap = 0.0
+            variation_before = eval_before.principal_variation_san
+            if _needs_multipv(
+                is_book=book,
+                cpl=cpl,
+                eval_before_for_mover=eval_before_mover,
+                tactical_tags=tactical_tags,
+                board_before=board_before,
+            ):
+                multipv_before = engine.analyze(
+                    parsed_move.fen_before, depth=use_depth, multipv=3
+                )
+                tactical_tags, multipv_is_best, uniqueness_gap = _append_multipv_tags(
+                    tags=tactical_tags,
+                    board_before=board_before,
+                    move=move_obj,
+                    mover_color=mover_color,
+                    eval_before_for_mover=eval_before_mover,
+                    eval_after_for_mover=eval_after_mover,
+                    mate_after=eval_after.mate_in,
+                    multipv_result=multipv_before,
+                )
+                is_best = multipv_is_best
+                variation_before = multipv_before.principal_variation_san
 
             classification = classify_move(
                 cpl=cpl,
@@ -136,6 +246,7 @@ def analyze_pgn(
                 is_book=book,
                 is_best_move=is_best,
                 tactical_tags=tactical_tags,
+                uniqueness_gap=uniqueness_gap,
             )
 
             explanation = explain_move(
@@ -157,7 +268,7 @@ def analyze_pgn(
                 Classification.MISS,
                 Classification.INACCURACY,
             ):
-                variation = eval_before.principal_variation_san[:8]
+                variation = variation_before[:8]
 
             results.append(
                 MoveAnalysis(

@@ -8,7 +8,7 @@ Design goals (per spec section 21 - performance):
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 import chess
@@ -22,6 +22,17 @@ class EngineUnavailableError(RuntimeError):
 
 
 @dataclass
+class EngineCandidate:
+    """One MultiPV candidate, always scored from White's perspective."""
+
+    score_pawns: Optional[float]
+    mate_in: Optional[int]
+    move_uci: str
+    move_san: str
+    principal_variation_san: list[str]
+
+
+@dataclass
 class EngineResult:
     # Evaluation from White's perspective, in pawns. None if it's a mate score
     # with no meaningful centipawn value.
@@ -31,6 +42,7 @@ class EngineResult:
     best_move_san: str
     principal_variation_uci: list[str]
     principal_variation_san: list[str]
+    candidates: list[EngineCandidate] = field(default_factory=list)
 
 
 class StockfishEngine:
@@ -57,7 +69,13 @@ class StockfishEngine:
 
         return self._engine
 
-    def analyze(self, fen: str, depth: int | None = None, pv_length: int = 8) -> EngineResult:
+    def analyze(
+        self,
+        fen: str,
+        depth: int | None = None,
+        pv_length: int = 8,
+        multipv: int = 1,
+    ) -> EngineResult:
         """Analyze a position and return the best line + evaluation.
 
         Evaluation and PV are always expressed relative to White (standard
@@ -94,22 +112,26 @@ class StockfishEngine:
             )
 
         try:
-            info = engine.analyse(board, chess.engine.Limit(depth=use_depth), multipv=1)
+            info = engine.analyse(
+                board, chess.engine.Limit(depth=use_depth), multipv=max(1, multipv)
+            )
         except chess.engine.EngineTerminatedError as exc:
             # Try to restart once - handles transient crashes.
             self._engine = None
             engine = self._ensure_started()
             try:
-                info = engine.analyse(board, chess.engine.Limit(depth=use_depth), multipv=1)
+                info = engine.analyse(
+                    board, chess.engine.Limit(depth=use_depth), multipv=max(1, multipv)
+                )
             except Exception as exc2:
                 raise EngineUnavailableError(f"Stockfish engine error: {exc2}") from exc2
         except Exception as exc:
             raise EngineUnavailableError(f"Stockfish analysis failed: {exc}") from exc
 
-        if isinstance(info, list):
-            info = info[0]
+        infos = info if isinstance(info, list) else [info]
+        primary = infos[0]
 
-        pov_score = info["score"]  # chess.engine.PovScore, relative to side to move
+        pov_score = primary["score"]  # chess.engine.PovScore, relative to side to move
         white_score = pov_score.white()
 
         mate_in = white_score.mate()
@@ -117,7 +139,7 @@ class StockfishEngine:
         if mate_in is None:
             score_pawns = white_score.score() / 100.0
 
-        pv = info.get("pv", [])
+        pv = primary.get("pv", [])
         if not pv:
             # No legal moves (shouldn't happen for non-terminal positions).
             return EngineResult(
@@ -142,6 +164,33 @@ class StockfishEngine:
             pv_uci.append(mv.uci())
             pv_board.push(mv)
 
+        candidates: list[EngineCandidate] = []
+        for candidate_info in infos:
+            candidate_pv = candidate_info.get("pv", [])
+            if not candidate_pv:
+                continue
+            candidate_score = candidate_info["score"].white()
+            candidate_mate = candidate_score.mate()
+            candidate_pawns = (
+                None if candidate_mate is not None else candidate_score.score() / 100.0
+            )
+            candidate_board = board.copy()
+            candidate_san: list[str] = []
+            for candidate_move in candidate_pv[:pv_length]:
+                if candidate_move not in candidate_board.legal_moves:
+                    break
+                candidate_san.append(candidate_board.san(candidate_move))
+                candidate_board.push(candidate_move)
+            candidates.append(
+                EngineCandidate(
+                    score_pawns=candidate_pawns,
+                    mate_in=candidate_mate,
+                    move_uci=candidate_pv[0].uci(),
+                    move_san=board.san(candidate_pv[0]),
+                    principal_variation_san=candidate_san,
+                )
+            )
+
         return EngineResult(
             score_pawns=score_pawns,
             mate_in=mate_in,
@@ -149,6 +198,7 @@ class StockfishEngine:
             best_move_san=best_move_san,
             principal_variation_uci=pv_uci,
             principal_variation_san=pv_san,
+            candidates=candidates,
         )
 
     def close(self) -> None:

@@ -24,11 +24,15 @@ THRESHOLDS = {
 }
 
 # Brilliant-move heuristic tuning knobs.
-BRILLIANT_MAX_CPL = 10  # move must be (near-)best in engine terms
+# A shallow/medium engine search can differ by a few tenths between the
+# before/after searches. 30 CPL is still near-best, but never sufficient on
+# its own: the MultiPV/tactical score below remains mandatory for Brilliant.
+BRILLIANT_MAX_CPL = 30
 BRILLIANT_MIN_EVAL_AFTER = -0.5  # don't call a move brilliant if it's losing badly
-BRILLIANT_SACRIFICE_MIN_LOSS = 200  # centipawns of *material* given up, roughly
 MISS_MIN_CPL = 75
 MISS_MIN_OPPORTUNITY = 1.5  # pawn advantage available before the missed move
+UNIQUE_BEST_GAP = 0.8  # pawns between Stockfish PV1 and PV2
+ONLY_MOVE_GAP = 1.5
 
 
 def classify_by_cpl(cpl: int) -> Classification:
@@ -144,6 +148,7 @@ def classify_move(
     is_book: bool,
     is_best_move: bool,
     tactical_tags: list[str],
+    uniqueness_gap: float = 0.0,
 ) -> Classification:
     """Combine CPL, book status and tactical signals into a final classification.
 
@@ -155,21 +160,39 @@ def classify_move(
 
     base = classify_by_cpl(cpl)
 
-    # BRILLIANT heuristic (spec section 10): near-best move, involves a
-    # material sacrifice, and doesn't leave the mover in a bad position.
+    tag_set = set(tactical_tags)
+    unique_best = "unique_best" in tag_set or uniqueness_gap >= UNIQUE_BEST_GAP
+    only_move = "only_move" in tag_set or uniqueness_gap >= ONLY_MOVE_GAP
+
+    # Several independent engine/tactical signals are required. This permits
+    # quiet tactical moves, defensive resources, and forcing moves while
+    # keeping Brilliant deliberately rare.
+    brilliant_score = 0
+    brilliant_score += 2 if "sacrifice" in tag_set else 0
+    brilliant_score += 2 if only_move else 0
+    brilliant_score += 1 if unique_best else 0
+    brilliant_score += 2 if "quiet_tactical" in tag_set else 0
+    brilliant_score += 2 if "mating_threat" in tag_set else 0
+    brilliant_score += 2 if "checkmate" in tag_set else 0
+    brilliant_score += 1 if "tactical_sequence" in tag_set else 0
+    brilliant_score += 1 if "tactical_conversion" in tag_set else 0
+    brilliant_score += 1 if "defensive_resource" in tag_set else 0
+    brilliant_score += 1 if "winning_material" in tag_set else 0
+
     if (
-        cpl <= BRILLIANT_MAX_CPL
-        and "sacrifice" in tactical_tags
+        is_best_move
+        and cpl <= BRILLIANT_MAX_CPL
         and eval_after_for_mover >= BRILLIANT_MIN_EVAL_AFTER
-        and base in (Classification.BEST, Classification.EXCELLENT)
+        and brilliant_score >= 4
     ):
         return Classification.BRILLIANT
 
-    # A Great move is the engine's top choice in a forcing, decisive moment.
-    # Detecting literal "only moves" needs a MultiPV search; this transparent
-    # MVP heuristic deliberately labels only forcing best moves as Great.
-    if is_best_move and cpl <= THRESHOLDS[Classification.BEST] and any(
-        tag in tactical_tags for tag in ("checkmate", "winning_material", "forced_move")
+    # Great needs a meaningful engine distinction or a verified tactical/only
+    # move signal, but not the higher combined Brilliant score.
+    if is_best_move and cpl <= THRESHOLDS[Classification.BEST] and (
+        only_move
+        or (unique_best and bool(tag_set & {"quiet_tactical", "tactical_conversion", "defensive_resource"}))
+        or bool(tag_set & {"checkmate", "winning_material", "forced_move"})
     ):
         return Classification.GREAT
 
@@ -180,6 +203,7 @@ def classify_move(
         not is_best_move
         and eval_before_for_mover >= MISS_MIN_OPPORTUNITY
         and cpl >= MISS_MIN_CPL
+        and uniqueness_gap >= UNIQUE_BEST_GAP
     ):
         return Classification.MISS
 

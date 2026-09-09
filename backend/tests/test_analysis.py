@@ -48,6 +48,7 @@ def test_checkmating_move_is_not_penalized(blunder_pgn):
     mating_move = moves[-1]
     assert mating_move.san == "Qxf7#"
     assert mating_move.classification in (
+        Classification.BRILLIANT,
         Classification.BEST,
         Classification.GREAT,
         Classification.BOOK,
