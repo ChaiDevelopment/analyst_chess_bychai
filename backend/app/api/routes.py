@@ -5,8 +5,11 @@ from fastapi import APIRouter, HTTPException
 from app.chess.pgn_parser import PGNParseError, parse_pgn
 from app.config import settings
 from app.engine.stockfish_engine import EngineUnavailableError
-from app.models.schemas import AnalyzeRequest, AnalyzeResponse, HealthResponse
-from app.services.analysis import analyze_pgn
+from app.models.schemas import (
+    AnalyzeRequest, AnalyzeResponse, HealthResponse,
+    PositionAnalyzeRequest, PositionAnalyzeResponse,
+)
+from app.services.analysis import analyze_pgn, analyze_position_move
 
 router = APIRouter()
 
@@ -57,3 +60,17 @@ def analyze(request: AnalyzeRequest) -> AnalyzeResponse:
         ai_explanations_enabled=settings.ai_explanations_enabled,
         engine_depth=depth,
     )
+
+
+@router.post("/analyze-position", response_model=PositionAnalyzeResponse)
+def analyze_position(request: PositionAnalyzeRequest) -> PositionAnalyzeResponse:
+    if not settings.engine_available:
+        raise HTTPException(status_code=503, detail="Stockfish engine is not available on this server.")
+    try:
+        return analyze_position_move(request.fen, request.move, request.depth)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except EngineUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Position analysis failed: {exc}") from exc

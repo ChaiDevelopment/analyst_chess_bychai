@@ -1,5 +1,6 @@
 import { Chessboard } from 'react-chessboard'
-import type { Square } from 'chess.js'
+import { Chess, type Square } from 'chess.js'
+import { useMemo, useState, type CSSProperties } from 'react'
 import type { MoveAnalysis } from '../types/chess'
 
 interface Props {
@@ -7,6 +8,7 @@ interface Props {
   currentMove: MoveAnalysis | null
   showBestMove: boolean
   boardWidth: number
+  onExploreMove?: (uci: string, fenAfter: string) => void
 }
 
 function squareStyle(color: string) {
@@ -15,14 +17,40 @@ function squareStyle(color: string) {
   }
 }
 
-export default function ChessBoardView({ fen, currentMove, showBestMove, boardWidth }: Props) {
-  const customSquareStyles: Record<string, React.CSSProperties> = {}
+export default function ChessBoardView({ fen, currentMove, showBestMove, boardWidth, onExploreMove }: Props) {
+  const customSquareStyles: Record<string, CSSProperties> = {}
+  const [selectedSquare, setSelectedSquare] = useState<Square | null>(null)
+  const chess = useMemo(() => new Chess(fen), [fen])
 
   if (currentMove) {
     const from = currentMove.uci.slice(0, 2)
     const to = currentMove.uci.slice(2, 4)
     customSquareStyles[from] = squareStyle('rgba(201, 162, 39, 0.35)')
     customSquareStyles[to] = squareStyle('rgba(201, 162, 39, 0.45)')
+  }
+  if (selectedSquare) {
+    customSquareStyles[selectedSquare] = squareStyle('rgba(95, 163, 122, 0.55)')
+    for (const legalMove of chess.moves({ square: selectedSquare, verbose: true })) {
+      customSquareStyles[legalMove.to] = squareStyle('rgba(95, 163, 122, 0.28)')
+    }
+  }
+
+  function onSquareClick(square: Square) {
+    if (!onExploreMove) return
+    const piece = chess.get(square)
+    if (!selectedSquare) {
+      if (piece?.color === chess.turn()) setSelectedSquare(square)
+      return
+    }
+    const isLegalDestination = chess.moves({ square: selectedSquare, verbose: true })
+      .some((legalMove) => legalMove.to === square)
+    if (isLegalDestination) {
+      const move = chess.move({ from: selectedSquare, to: square, promotion: 'q' })
+      setSelectedSquare(null)
+      onExploreMove(move.from + move.to + (move.promotion ?? ''), chess.fen())
+      return
+    }
+    setSelectedSquare(piece?.color === chess.turn() ? square : null)
   }
 
   const arrows: [Square, Square, string?][] = []
@@ -59,6 +87,7 @@ export default function ChessBoardView({ fen, currentMove, showBestMove, boardWi
         customLightSquareStyle={{ backgroundColor: '#EDE3CC' }}
         customSquareStyles={customSquareStyles}
         customArrows={arrows}
+        onSquareClick={onSquareClick}
         animationDuration={200}
       />
     </div>

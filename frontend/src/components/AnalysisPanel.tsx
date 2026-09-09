@@ -1,13 +1,16 @@
-import type { MoveAnalysis } from '../types/chess'
+import type { CandidateMove, MoveAnalysis } from '../types/chess'
 import { CLASSIFICATION_META, formatEval } from '../utils/classification'
 
 interface Props {
   move: MoveAnalysis | null
   showBestMove: boolean
   onToggleShowBestMove: () => void
+  candidates?: CandidateMove[]
+  loading?: boolean
+  error?: string | null
 }
 
-export default function AnalysisPanel({ move, showBestMove, onToggleShowBestMove }: Props) {
+export default function AnalysisPanel({ move, showBestMove, onToggleShowBestMove, candidates = [], loading = false, error }: Props) {
   if (!move) {
     return (
       <div className="h-full flex items-center justify-center text-ink-500 text-sm px-4 text-center">
@@ -90,6 +93,24 @@ export default function AnalysisPanel({ move, showBestMove, onToggleShowBestMove
           <div className="text-ink-500 text-xs mb-1.5 font-sans">Best line</div>
           <div className="font-sans text-sm text-ink-200 bg-ink-800/60 rounded-md p-3 leading-relaxed">
             {move.variation.join(' ')}
+          </div>
+        </div>
+      )}
+
+      {loading && <div className="font-sans text-sm text-brass-400">Engine is analysing your move...</div>}
+      {error && <div className="font-sans text-sm text-bad">{error}</div>}
+
+      {candidates.length > 0 && (
+        <div>
+          <div className="text-ink-500 text-xs mb-1.5 font-sans">Engine candidates</div>
+          <div className="space-y-1.5 font-sans text-sm">
+            {candidates.map((candidate, index) => (
+              <div key={candidate.uci} className="bg-ink-800/60 rounded-md px-3 py-2">
+                <span className="text-ink-500 mr-2">{index + 1}.</span>
+                <span className="text-good">{candidate.san}</span>
+                <span className="text-ink-500 ml-2">{candidate.evaluation >= 0 ? '+' : ''}{candidate.evaluation.toFixed(2)}</span>
+              </div>
+            ))}
           </div>
         </div>
       )}

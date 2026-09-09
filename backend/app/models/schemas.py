@@ -27,6 +27,14 @@ class AnalyzeRequest(BaseModel):
     )
 
 
+class PositionAnalyzeRequest(BaseModel):
+    """One user-selected move from the interactive analysis board."""
+
+    fen: str = Field(..., min_length=1)
+    move: str = Field(..., min_length=4, max_length=5, pattern=r"^[a-h][1-8][a-h][1-8][qrbn]?$")
+    depth: Optional[int] = Field(None, ge=4, le=30)
+
+
 class GameInfo(BaseModel):
     event: Optional[str] = None
     site: Optional[str] = None
@@ -104,6 +112,20 @@ class AnalyzeResponse(BaseModel):
     moves: list[MoveAnalysis]
     summary: GameSummary
     ai_explanations_enabled: bool
+    engine_depth: int
+
+
+class CandidateMove(BaseModel):
+    uci: str
+    san: str
+    evaluation: float
+    mate_in: Optional[int] = None
+    variation: list[str] = Field(default_factory=list)
+
+
+class PositionAnalyzeResponse(BaseModel):
+    move: MoveAnalysis
+    candidates: list[CandidateMove] = Field(default_factory=list)
     engine_depth: int
 
 

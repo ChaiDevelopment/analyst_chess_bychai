@@ -20,12 +20,14 @@ from app.config import settings
 from app.engine.stockfish_engine import EngineResult, StockfishEngine
 from app.models.schemas import (
     Classification,
+    CandidateMove,
     CriticalMoment,
     GameInfo,
     GameSummary,
     MoveAnalysis,
     MoveStats,
     PlayerSummary,
+    PositionAnalyzeResponse,
 )
 from app.services.accuracy import accuracy_from_move_quality
 from app.services.explanation import explain_move
@@ -357,6 +359,104 @@ def analyze_pgn(
 
     summary = build_summary(results, game_info)
     return game_info, results, summary
+
+
+def analyze_position_move(fen: str, move_uci: str, depth: int | None = None) -> PositionAnalyzeResponse:
+    """Review a move chosen on the interactive board.
+
+    The best and played moves are searched from the identical root position,
+    which makes this result suitable for immediate click-to-move feedback.
+    """
+    try:
+        board_before = chess.Board(fen)
+        move_obj = chess.Move.from_uci(move_uci)
+    except ValueError as exc:
+        raise ValueError("Invalid position or UCI move") from exc
+    if move_obj not in board_before.legal_moves:
+        raise ValueError("That move is not legal in this position")
+
+    mover_color = "white" if board_before.turn == chess.WHITE else "black"
+    san = board_before.san(move_obj)
+    board_after = board_before.copy()
+    board_after.push(move_obj)
+    use_depth = depth or settings.ANALYSIS_DEPTH
+    verification_depth = max(use_depth, 18)
+
+    with StockfishEngine(depth=verification_depth) as engine:
+        best_line = engine.analyze(fen, depth=verification_depth, multipv=3)
+        played_line = engine.analyze(
+            fen, depth=verification_depth, root_moves=[move_obj]
+        )
+
+    before_for_mover = _eval_for_mover(
+        best_line.score_pawns, best_line.mate_in, mover_color
+    )
+    after_for_mover = _eval_for_mover(
+        played_line.score_pawns, played_line.mate_in, mover_color
+    )
+    cpl = int(round(max(0.0, before_for_mover - after_for_mover) * 100))
+    tags = detect_tactical_tags(board_before, move_obj, board_after)
+    tags, is_best, uniqueness_gap = _append_multipv_tags(
+        tags=tags,
+        board_before=board_before,
+        move=move_obj,
+        mover_color=mover_color,
+        eval_before_for_mover=before_for_mover,
+        eval_after_for_mover=after_for_mover,
+        mate_after=played_line.mate_in,
+        multipv_result=best_line,
+    )
+    classification = classify_move(
+        cpl=cpl,
+        eval_before_for_mover=before_for_mover,
+        eval_after_for_mover=after_for_mover,
+        is_book=False,
+        is_best_move=is_best,
+        tactical_tags=tags,
+        uniqueness_gap=uniqueness_gap,
+        win_probability_loss=max(
+            0.0, win_probability(before_for_mover) - win_probability(after_for_mover)
+        ),
+    )
+    move = MoveAnalysis(
+        ply=0,
+        move_number=board_before.fullmove_number,
+        color=mover_color,
+        san=san,
+        uci=move_uci,
+        fen_before=fen,
+        fen_after=board_after.fen(),
+        evaluation_before=round(_white_perspective(best_line.score_pawns, best_line.mate_in), 2),
+        evaluation_after=round(_white_perspective(played_line.score_pawns, played_line.mate_in), 2),
+        mate_before=best_line.mate_in,
+        mate_after=played_line.mate_in,
+        best_move=best_line.best_move_uci,
+        best_move_san=best_line.best_move_san,
+        centipawn_loss=cpl,
+        classification=classification,
+        tactical_tags=tags,
+        variation=best_line.principal_variation_san[:8],
+        explanation=explain_move(
+            san=san,
+            classification=classification,
+            eval_before=_white_perspective(best_line.score_pawns, best_line.mate_in),
+            eval_after=_white_perspective(played_line.score_pawns, played_line.mate_in),
+            best_move_san=best_line.best_move_san or san,
+            centipawn_loss=cpl,
+            tactical_tags=tags,
+        ),
+    )
+    candidates = [
+        CandidateMove(
+            uci=candidate.move_uci,
+            san=candidate.move_san,
+            evaluation=round(_white_perspective(candidate.score_pawns, candidate.mate_in), 2),
+            mate_in=candidate.mate_in,
+            variation=candidate.principal_variation_san[:8],
+        )
+        for candidate in best_line.candidates
+    ]
+    return PositionAnalyzeResponse(move=move, candidates=candidates, engine_depth=verification_depth)
 
 
 def build_summary(moves: list[MoveAnalysis], game_info: GameInfo) -> GameSummary:

@@ -1,4 +1,4 @@
-import type { AnalyzeResponse } from '../types/chess'
+import type { AnalyzeResponse, PositionAnalyzeResponse } from '../types/chess'
 
 // On Vercel, VITE_API_URL is baked in during the build. Set it to the PUBLIC
 // Railway URL plus /api; a *.railway.internal host only works inside Railway.
@@ -48,6 +48,24 @@ export async function analyzeGame(pgn: string, depth?: number): Promise<AnalyzeR
     throw new ApiRequestError(message, res.status)
   }
 
+  return res.json()
+}
+
+export async function analyzePosition(fen: string, move: string): Promise<PositionAnalyzeResponse> {
+  let res: Response
+  try {
+    res = await fetch(`${BASE_URL}/analyze-position`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fen, move }),
+    })
+  } catch {
+    throw new ApiRequestError('Cannot reach the engine to analyse this move.', 0)
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => null)
+    throw new ApiRequestError(body?.detail ?? 'Could not analyse this move.', res.status)
+  }
   return res.json()
 }
 

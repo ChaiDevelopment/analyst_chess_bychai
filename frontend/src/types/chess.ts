@@ -92,6 +92,20 @@ export interface AnalyzeResponse {
   engine_depth: number
 }
 
+export interface CandidateMove {
+  uci: string
+  san: string
+  evaluation: number
+  mate_in?: number | null
+  variation: string[]
+}
+
+export interface PositionAnalyzeResponse {
+  move: MoveAnalysis
+  candidates: CandidateMove[]
+  engine_depth: number
+}
+
 export interface ApiError {
   detail: string
 }
