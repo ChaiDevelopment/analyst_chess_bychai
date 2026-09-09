@@ -1,13 +1,15 @@
 """Deterministic move-classification engine.
 
-This is intentionally simple and heuristic (spec section 10). It is NOT
-claimed to reproduce Chess.com's proprietary classifier - it is a
-best-effort, explainable MVP built from Stockfish centipawn loss plus a
-few tactical signals.
+Chess.com's exact classifier is proprietary, so this is an explainable
+approximation of its *behaviour*: engine-verified move quality, tactical
+context, and the change in a player's practical winning chances.  It must
+never infer quality from a raw evaluation swing alone.
 
 Thresholds are centralised here so they're trivial to tune later.
 """
 from __future__ import annotations
+
+import math
 
 import chess
 
@@ -33,6 +35,19 @@ MISS_MIN_CPL = 75
 MISS_MIN_OPPORTUNITY = 1.5  # pawn advantage available before the missed move
 UNIQUE_BEST_GAP = 0.8  # pawns between Stockfish PV1 and PV2
 ONLY_MOVE_GAP = 1.5
+
+
+def win_probability(evaluation_for_mover: float) -> float:
+    """Return a stable 0..100 practical win chance from a pawn evaluation.
+
+    A sigmoid is deliberately used instead of treating every 100cp equally:
+    dropping from +0.3 to -0.7 is much more meaningful than dropping from
+    -8 to -9.  This mirrors the principle behind Chess.com's win-percent
+    based review labels while keeping the calculation fully local.
+    """
+    # Clamp first so mate-like scores cannot overflow exp().
+    value = max(-12.0, min(12.0, evaluation_for_mover))
+    return 100.0 / (1.0 + math.exp(-0.7 * value))
 
 
 def classify_by_cpl(cpl: int) -> Classification:
@@ -149,6 +164,7 @@ def classify_move(
     is_best_move: bool,
     tactical_tags: list[str],
     uniqueness_gap: float = 0.0,
+    win_probability_loss: float | None = None,
 ) -> Classification:
     """Combine CPL, book status and tactical signals into a final classification.
 
@@ -158,7 +174,23 @@ def classify_move(
     if is_book:
         return Classification.BOOK
 
-    base = classify_by_cpl(cpl)
+    # Fixed CPL thresholds remain a safe fallback for callers that only have
+    # CPL.  In a full review, WPL avoids over-penalising already lost/won
+    # positions and is considerably closer to product-style review labels.
+    if win_probability_loss is None:
+        base = classify_by_cpl(cpl)
+    elif win_probability_loss <= 0.5:
+        base = Classification.BEST
+    elif win_probability_loss <= 2.0:
+        base = Classification.EXCELLENT
+    elif win_probability_loss <= 5.0:
+        base = Classification.GOOD
+    elif win_probability_loss <= 10.0:
+        base = Classification.INACCURACY
+    elif win_probability_loss <= 20.0:
+        base = Classification.MISTAKE
+    else:
+        base = Classification.BLUNDER
 
     tag_set = set(tactical_tags)
     unique_best = "unique_best" in tag_set or uniqueness_gap >= UNIQUE_BEST_GAP
@@ -183,7 +215,20 @@ def classify_move(
         is_best_move
         and cpl <= BRILLIANT_MAX_CPL
         and eval_after_for_mover >= BRILLIANT_MIN_EVAL_AFTER
-        and brilliant_score >= 4
+        # Quiet unique tactical moves can be Brilliant too. Requiring the
+        # engine gap plus a tactical continuation prevents ordinary quiet
+        # best moves from being promoted merely for being near-perfect.
+        and brilliant_score >= 3
+        and (
+            "sacrifice" in tag_set
+            or "checkmate" in tag_set
+            or (
+                unique_best
+                and "quiet_tactical" in tag_set
+                and "tactical_sequence" in tag_set
+                and max(abs(eval_before_for_mover), abs(eval_after_for_mover)) >= 1.0
+            )
+        )
     ):
         return Classification.BRILLIANT
 

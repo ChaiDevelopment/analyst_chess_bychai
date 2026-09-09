@@ -56,3 +56,16 @@ def test_quiet_unique_tactical_move_can_be_brilliant():
         tactical_tags=["unique_best", "quiet_tactical", "tactical_sequence"],
         uniqueness_gap=1.0,
     ) == Classification.BRILLIANT
+
+
+def test_winning_chance_loss_prevents_false_inaccuracy_in_lost_position():
+    """CPL in an already lost position is not the same as a slip in equality."""
+    assert classify_move(
+        cpl=120,
+        eval_before_for_mover=-8.0,
+        eval_after_for_mover=-9.2,
+        is_book=False,
+        is_best_move=False,
+        tactical_tags=[],
+        win_probability_loss=0.1,
+    ) == Classification.BEST

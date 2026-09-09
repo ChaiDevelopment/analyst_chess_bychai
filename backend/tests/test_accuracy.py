@@ -1,4 +1,4 @@
-from app.services.accuracy import accuracy_from_average_cpl
+from app.services.accuracy import accuracy_from_average_cpl, accuracy_from_move_quality
 
 
 def test_zero_cpl_is_perfect():
@@ -21,3 +21,8 @@ def test_accuracy_is_clamped_between_0_and_100():
     assert 0.0 <= accuracy_from_average_cpl(0) <= 100.0
     assert 0.0 <= accuracy_from_average_cpl(100000) <= 100.0
     assert accuracy_from_average_cpl(100000) == 0.0
+
+
+def test_game_accuracy_is_one_to_one_hundred_and_penalises_errors():
+    assert accuracy_from_move_quality([100, 100]) == 100.0
+    assert 1.0 <= accuracy_from_move_quality([100, 1]) < 100.0

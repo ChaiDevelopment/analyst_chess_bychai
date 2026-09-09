@@ -12,6 +12,7 @@ from app.chess.classification import (
     UNIQUE_BEST_GAP,
     classify_move,
     detect_tactical_tags,
+    win_probability,
 )
 from app.chess.opening_book import is_book_move, lookup_opening
 from app.chess.pgn_parser import ParsedGame, parse_pgn
@@ -26,7 +27,7 @@ from app.models.schemas import (
     MoveStats,
     PlayerSummary,
 )
-from app.services.accuracy import accuracy_from_average_cpl
+from app.services.accuracy import accuracy_from_move_quality
 from app.services.explanation import explain_move
 
 
@@ -67,8 +68,12 @@ def _needs_multipv(
         return False
     if cpl >= 75 and eval_before_for_mover >= 1.5:
         return True
-    if cpl > 30:
-        return False
+    # Do not skip MultiPV merely because a first shallow pass reports a
+    # sizeable loss.  Those are exactly the positions where a quiet tactical
+    # resource (for example ...Qf6 followed by a forcing attack) is most
+    # likely to be mislabelled.
+    if cpl >= 20:
+        return True
     return (
         bool(tactical_tags)
         or abs(eval_before_for_mover) >= 1.5
@@ -138,6 +143,7 @@ def _append_multipv_tags(
 def _build_stats(moves: list[MoveAnalysis], color: str) -> tuple[MoveStats, float, float]:
     stats = MoveStats()
     losses: list[int] = []
+    move_qualities: list[float] = []
     field_map = {
         Classification.BRILLIANT: "brilliant",
         Classification.GREAT: "great",
@@ -156,9 +162,13 @@ def _build_stats(moves: list[MoveAnalysis], color: str) -> tuple[MoveStats, floa
         field = field_map[m.classification]
         setattr(stats, field, getattr(stats, field) + 1)
         losses.append(m.centipawn_loss)
+        if m.classification != Classification.BOOK:
+            before = m.evaluation_before if color == "white" else -m.evaluation_before
+            after = m.evaluation_after if color == "white" else -m.evaluation_after
+            move_qualities.append(100.0 - max(0.0, win_probability(before) - win_probability(after)))
 
     avg_cpl = sum(losses) / len(losses) if losses else 0.0
-    acc = accuracy_from_average_cpl(avg_cpl)
+    acc = accuracy_from_move_quality(move_qualities)
     return stats, avg_cpl, acc
 
 
@@ -223,9 +233,33 @@ def analyze_pgn(
                 tactical_tags=tactical_tags,
                 board_before=board_before,
             ):
+                # Verify both the best line and the played line at the same
+                # deeper depth. Comparing separately searched before/after
+                # positions is prone to horizon noise and was the source of
+                # false inaccuracies for tactical moves.
+                verification_depth = max(use_depth, 18)
                 multipv_before = engine.analyze(
-                    parsed_move.fen_before, depth=use_depth, multipv=3
+                    parsed_move.fen_before, depth=verification_depth, multipv=3
                 )
+                played_line = engine.analyze(
+                    parsed_move.fen_before,
+                    depth=verification_depth,
+                    root_moves=[move_obj],
+                )
+                verified_before_mover = _eval_for_mover(
+                    multipv_before.score_pawns, multipv_before.mate_in, mover_color
+                )
+                verified_after_mover = _eval_for_mover(
+                    played_line.score_pawns, played_line.mate_in, mover_color
+                )
+                cpl = int(round(max(0.0, verified_before_mover - verified_after_mover) * 100))
+                eval_before_mover = verified_before_mover
+                eval_after_mover = verified_after_mover
+                # The root-move result is the engine's evaluation of the
+                # actual resulting position, so expose it and reuse it for
+                # the following ply.
+                eval_before = multipv_before
+                eval_after = played_line
                 tactical_tags, multipv_is_best, uniqueness_gap = _append_multipv_tags(
                     tags=tactical_tags,
                     board_before=board_before,
@@ -247,6 +281,9 @@ def analyze_pgn(
                 is_best_move=is_best,
                 tactical_tags=tactical_tags,
                 uniqueness_gap=uniqueness_gap,
+                win_probability_loss=max(
+                    0.0, win_probability(eval_before_mover) - win_probability(eval_after_mover)
+                ),
             )
 
             explanation = explain_move(

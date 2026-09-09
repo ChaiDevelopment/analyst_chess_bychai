@@ -75,6 +75,7 @@ class StockfishEngine:
         depth: int | None = None,
         pv_length: int = 8,
         multipv: int = 1,
+        root_moves: list[chess.Move] | None = None,
     ) -> EngineResult:
         """Analyze a position and return the best line + evaluation.
 
@@ -113,7 +114,10 @@ class StockfishEngine:
 
         try:
             info = engine.analyse(
-                board, chess.engine.Limit(depth=use_depth), multipv=max(1, multipv)
+                board,
+                chess.engine.Limit(depth=use_depth),
+                multipv=max(1, multipv),
+                root_moves=root_moves,
             )
         except chess.engine.EngineTerminatedError as exc:
             # Try to restart once - handles transient crashes.
@@ -121,7 +125,10 @@ class StockfishEngine:
             engine = self._ensure_started()
             try:
                 info = engine.analyse(
-                    board, chess.engine.Limit(depth=use_depth), multipv=max(1, multipv)
+                    board,
+                    chess.engine.Limit(depth=use_depth),
+                    multipv=max(1, multipv),
+                    root_moves=root_moves,
                 )
             except Exception as exc2:
                 raise EngineUnavailableError(f"Stockfish engine error: {exc2}") from exc2

@@ -1,9 +1,4 @@
-"""Accuracy scoring.
-
-Spec section 17: build a simple accuracy score from average centipawn loss,
-kept in its own function so the formula is trivial to swap out later.
-This is NOT claimed to match Chess.com's (undisclosed) accuracy formula.
-"""
+"""Accuracy scoring based on per-move practical winning chances."""
 from __future__ import annotations
 
 import math
@@ -24,3 +19,17 @@ def accuracy_from_average_cpl(average_cpl: float) -> float:
     # ordinary games collapse to 0.0 accuracy.
     score = 100.0 * math.exp(-0.006 * average_cpl)
     return max(0.0, min(100.0, round(score, 1)))
+
+
+def accuracy_from_move_quality(move_qualities: list[float]) -> float:
+    """Aggregate 0..100 per-move quality scores into an accuracy of 1..100.
+
+    The harmonic mean makes a serious mistake hurt materially more than a
+    handful of harmless near-best moves, while still rewarding consistent
+    play. Book moves are excluded by the caller.
+    """
+    if not move_qualities:
+        return 100.0
+    bounded = [max(1.0, min(100.0, quality)) for quality in move_qualities]
+    harmonic = len(bounded) / sum(1.0 / quality for quality in bounded)
+    return round(max(1.0, min(100.0, harmonic)), 1)
